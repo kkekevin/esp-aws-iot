@@ -1,18 +1,38 @@
-#include <Arduino_BuiltIn.h>
 #include "utils.h"
-#include <PubSubClient.h>
 
 void setup() {
-    Serial.begin(115200);
-    connectAWS();
+  Serial.begin(115200);
+  sensor.begin();
+  WiFi.onEvent(WiFiEvent); // Register the event handler
+  connectWIFI();
+  
+  pinMode(RELAY, OUTPUT);
+  pinMode(WLED, OUTPUT);
+  digitalWrite(RELAY, LOW);
+  digitalWrite(WLED, HIGH);
 }
 
 void loop() {
-  int metricsValue = random(1, 100);
-  Serial.print(F("metrics: "));
-  Serial.print(metricsValue);
+  if (millis() - previousMillis >= interval) {
+    sensor.requestTemperatures();
+    temp = sensor.getTempCByIndex(0);
+    if(temp == DEVICE_DISCONNECTED_C)
+      Serial.println("Erro: Sensor desconectado durante a leitura (-127).");
+    // check variation over 2 from the previous one
+    else if (temp - previousTemp > 2.0 || previousTemp - temp > 2.0) {
+      Serial.print("On the threshold of target temperature: ");
+      Serial.println(temp);
+      publishMessage(temp, "On the threshold of target temperature");
+      previousTemp = temp;
+    }
+    previousMillis = millis();
+  }
 
-  publishMessage(metricsValue);
+  // reverse-act hysteresis controller 
+  if (temp <= (setpoint - 2) && relayStatus)
+    relay_toggle (&relayStatus);
+  else if (temp >= (setpoint + 1) && !relayStatus)
+    relay_toggle (&relayStatus);
+
   client.loop();
-  delay(1000);
 }
