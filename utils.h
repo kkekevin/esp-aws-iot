@@ -9,7 +9,7 @@
 #include <DallasTemperature.h>
 
 
-#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
+#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub" // This topic must match the SQL of IoT Rule
 #define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
 #define WLED 27
 #define RELAY 22
@@ -50,7 +50,7 @@ void relay_toggle (bool *relay) {
 
 void setTemp (float t) {
   setpoint = t;
-  publishMessage (t, "temp updated by user");
+  publishMessage (t, "setpoint updated by user");
   Serial.println("setpoint updated successfully");
 }
 
@@ -145,10 +145,13 @@ void publishMessage(float metricsValue, String msg) {
   char timeStr[64];
   doc["temperature"] = metricsValue;
   if (getLocalTime(&timeinfo)) {
-    strftime(timeStr, sizeof(timeStr), "%A, %d %B %Y %H:%M:%S", &timeinfo);
-    doc["time"] = timeStr;
+    strftime(timeStr, sizeof(timeStr), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+    doc["timestamp"] = timeStr;
   }
   doc["msg"] = msg;
+  /* device id inserted manually for while, it can help us getting
+  info about sensor response, acting as a sort key of the ddb */
+  doc["device_id"] = 32;
 
   char jsonBuffer[512];
   serializeJson(doc, jsonBuffer);
