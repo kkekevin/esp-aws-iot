@@ -1,6 +1,7 @@
 #include <pgmspace.h>
 
-#define THINGNAME "esp32_1" // replace with thing name
+#define THINGNAME "esp32-ctemp-hy" // replace with thing name
+#define PHONE_NUMBER "" // replace with phone number
 
 const char WIFI_SSID[] = ""; // replace with wifi ssid              
 const char WIFI_PASSWORD[] = ""; // replace with wifi password
@@ -27,4 +28,3 @@ static const char AWS_CERT_PRIVATE[] PROGMEM = R"KEY(
 
 -----END RSA PRIVATE KEY-----
 )KEY";
-

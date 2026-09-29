@@ -16,8 +16,10 @@ void loop() {
   if (millis() - previousMillis >= interval) {
     sensor.requestTemperatures();
     temp = sensor.getTempCByIndex(0);
-    if(temp == DEVICE_DISCONNECTED_C)
-      Serial.println("Erro: Sensor desconectado durante a leitura (-127).");
+    if(temp == DEVICE_DISCONNECTED_C && previousTemp != temp) {
+      publishNotification(previousTemp);
+      previousTemp = temp;
+    }
     // check variation over 2 from the previous one
     else if (temp - previousTemp > 2.0 || previousTemp - temp > 2.0) {
       Serial.print("On the threshold of target temperature: ");

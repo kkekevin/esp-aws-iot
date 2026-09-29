@@ -9,7 +9,8 @@
 #include <DallasTemperature.h>
 
 
-#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub" // This topic must match the SQL of IoT Rule
+#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub/" // This topic must match the SQL of IoT Rule
+#define AWS_IOT_NOTIFY          "esp32/pub/notify" // unpluged sensor's cable or temp threshold
 #define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
 #define WLED 27
 #define RELAY 22
@@ -139,15 +140,22 @@ void WiFiEvent(WiFiEvent_t event) {
     }
 }
 
-void publishMessage(float metricsValue, String msg) {
-  StaticJsonDocument<200> doc;
+String setLocalTime (void) {
   struct tm timeinfo;
   char timeStr[64];
-  doc["temperature"] = metricsValue;
-  if (getLocalTime(&timeinfo)) {
+  if(getLocalTime(&timeinfo)) {
+    // ISO 8601 format: "2026-03-11T14:30:45"
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%dT%H:%M:%S", &timeinfo);
-    doc["timestamp"] = timeStr;
+    return timeStr;
+  } else {
+    return "LOCAL_TIME_UNAVAILABLE";
   }
+}
+
+void publishMessage(float metricsValue, String msg) {
+  StaticJsonDocument<200> doc;
+  doc["temperature"] = metricsValue;
+  doc["timestamp"] = setLocalTime();
   doc["msg"] = msg;
   /* device id inserted manually for while, it can help us getting
   info about sensor response, acting as a sort key of the ddb */
@@ -157,4 +165,18 @@ void publishMessage(float metricsValue, String msg) {
   serializeJson(doc, jsonBuffer);
  
   client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
+}
+
+void publishNotification(int metricsValue) {
+  Serial.println("Error: Sensor is unplugged (-127).");
+  StaticJsonDocument<200> doc;
+  doc["timestamp"] = setLocalTime();
+  doc["device_id"] = 32;
+  doc["phone_number"] = PHONE_NUMBER;
+  doc["temperature"] = metricsValue; // float types aren't supported on SNS
+
+  char jsonBuffer[512];
+  serializeJson(doc, jsonBuffer);
+ 
+  client.publish(AWS_IOT_NOTIFY, jsonBuffer);
 }
