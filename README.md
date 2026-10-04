@@ -1,10 +1,7 @@
 # Temperature Controller by Hysteresis using ESP32 with AWS IoT
 This project demonstrates a temperature controller integrated with some AWS services, maintaining the temperature of a fridge during fermentation of craft beer.
 ## Project Overview
-The beer production industry, the control of temperature is crucial at almost every stage, with critical importance during fermentation process, which is the focus of this project. This project addresses this challenge by implementing an **reverse-acting hysteresis controller** on an **ESP32**, and data can be accessed by any authenticated device connected to the internet. Communication is managed by AWS IoT Core, allowing for a seamless connection between the device and the cloud. This setup currently enables a real-time visualization of temperature data, as well as remote determination of the **setpoint** by the user. The prototype is a responsive and reliable control system where the hardware and software work in harmony to maintain stable temperature.
-
----
-
+In the craft beer production industry, precise temperature control is crucial at every stage, particularly during the fermentation process, which is the focus of this project. This project addresses this challenge by implementing a **reverse-acting hysteresis controller** on an **ESP32**, and data can be accessed by any authenticated device connected to the internet. Communication is managed by AWS IoT Core, allowing for a seamless connection between the device and the cloud. This setup currently enables a real-time visualization of temperature data, as well as remote determination of the **setpoint** by the user. The prototype is a responsive and reliable control system where the hardware and software work in harmony to maintain stable temperature.
 ## Hardware Components
 * **ESP32:** The brain of the system, controlling temperature of the fridge and handling Wi-Fi/MQTT communication to the Cloud.
 * **DS18b20:** The primary waterproof sensor, measures temperature inside the bucket.
@@ -90,7 +87,7 @@ Get Your AWS IoT Endpoint
 ```bash
 aws iot describe-endpoint --endpoint-type iot:Data-ATS
 ```
-### DynamoDB Setup
+### DynamoDB & SNS Setup
 Create a DynamoDB table:
 - Table name: ctemp-hy
 - Partition key: timestamp (String)
@@ -99,36 +96,55 @@ Create a DynamoDB table:
 aws dynamodb create-table \
     --table-name ctemp-hy \
     --attribute-definitions \
-        AttributeName=timestamp,AttributeType=S \
         AttributeName=device_id,AttributeType=N \
-    --key-schema AttributeName=timestamp,KeyType=HASH AttributeName=device_id,KeyType=RANGE \
+        AttributeName=timestamp,AttributeType=S \
+    --key-schema AttributeName=device_id,KeyType=HASH AttributeName=timestamp,KeyType=RANGE \
     --billing-mode PAY_PER_REQUEST \
     --table-class STANDARD
-
 ```
+For SNS, create a topic and subscribe to it. If you're using SMS protocol, you must verify your number via Console.
 ### Lambda Function
-Create a role attaching a managed dynamodb policy, to allow data pipeline. After that, create a rule for IoT core.
+Create a role attaching a managed dynamodb policy to allow data pipeline. After that, create a rule for IoT core and add permission to the function.
 #### IAM Permissions for Lambda
-Attach this policy to the Lambda execution role:
+Attach this policy to the Lambda execution role, guaranteeing a least-privilege for SNS and DynamoDB:
 ```bash
 {
-  "Effect": "Allow",
-  "Action": "dynamodb:PutItem",
-  "Resource": "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/ctemp-hy"
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DynamoDBPutItem",
+      "Effect": "Allow",
+      "Action": "dynamodb:PutItem",
+      "Resource": "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/ctemp-hy"
+    },
+    {
+      "Sid": "PublishSms",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "*"
+    }
+  ]
 }
 ```
 #### AWS IoT Rule
 ```bash
 {
-  "sql": "SELECT * FROM 'esp32/pub'",
+  "sql": "SELECT * FROM 'esp32/pub/+'",
   "ruleDisabled": false,
   "awsIotSqlVersion": "2016-03-23",
   "actions": [
-          {
-                  "lambda": {
-                          "functionArn": "arn:aws:lambda:us-east-1:652259>
-                  }
-          }
+    {
+      "lambda": {
+        "functionArn": "arn:aws:lambda:REGION:ACCOUNT_ID:function:iot-ctemp-function"
+      }
+    }
   ]
 }
+```
+Add permission for IoT principal
+```bash
+aws lambda add-permission --function-name iot-ctemp-function \
+--statement-id iot-events --action "lambda:InvokeFunction" --principal iot.amazonaws.com \
+--source-arn arn:aws:iot:REGION:ACCOUNT_ID:rule/my-rule \
+--source-account ACCOUNT_ID
 ```
